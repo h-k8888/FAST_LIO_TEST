@@ -944,9 +944,9 @@ void Preprocess::rs_handler(const sensor_msgs::PointCloud2_<allocator<void>>::Co
     pl_surf.reserve(plsize);
 //    ROS_INFO("PLSIZE: %d", plsize);
 
-    if (pl_orig.points[plsize - 1].time > 1000000)
-        for (int i = 0; i < plsize; i++)
-            pl_orig.points[i].time = 0;
+//    //排除错误时间戳
+//    if (pl_orig.points[plsize - 1].time > 1000000)
+//        pl_orig.points[plsize - 1].time = -1;
 
     /*** These variables only works when no point timestamps given ***/
     double omega_l = 0.361 * SCAN_RATE;       // scan angular velocity
@@ -956,25 +956,30 @@ void Preprocess::rs_handler(const sensor_msgs::PointCloud2_<allocator<void>>::Co
     std::vector<float> time_last(N_SCANS, 0.0);  // last offset time
     /*****************************************************************/
 
-    if (pl_orig.points[plsize - 1].time > 0)//todo check pl_orig.points[plsize - 1].time
-    {
-        given_offset_time = true;
-    }
-    else
-    {
-        given_offset_time = false;
-        double yaw_first = atan2(pl_orig.points[0].y, pl_orig.points[0].x) * 57.29578; // 记录第一个点(index 0)的yaw， to degree
-        double yaw_end  = yaw_first;
-        int layer_first = pl_orig.points[0].ring; // 第一个点(index 0)的layer序号
-        for (uint i = plsize - 1; i > 0; i--) // 倒序遍历，找到与第一个点相同layer的最后一个点
-        {
-            if (pl_orig.points[i].ring == layer_first)
-            {
-                yaw_end = atan2(pl_orig.points[i].y, pl_orig.points[i].x) * 57.29578;// 与第一个点相同layer的最后一个点的yaw
-                break;
-            }
-        }
-    }
+//    //当前帧最后一个点的时间大于0，认为已经给出时间补偿
+//    if (pl_orig.points[plsize - 1].time > 0)
+//    {
+//        given_offset_time = true;
+//    }
+//    else
+//    {
+//        //如果时间不正确，需要根据yaw重新计算时间
+//        given_offset_time = false;
+//        double yaw_first = atan2(pl_orig.points[0].y, pl_orig.points[0].x) * 57.29578; // 记录第一个点(index 0)的yaw， to degree
+//        double yaw_end  = yaw_first;
+//        int layer_first = pl_orig.points[0].ring; // 第一个点(index 0)的layer序号
+//        for (uint i = plsize - 1; i > 0; i--) // 倒序遍历，找到与第一个点相同layer的最后一个点
+//        {
+//            if (pl_orig.points[i].ring == layer_first)
+//            {
+//                yaw_end = atan2(pl_orig.points[i].y, pl_orig.points[i].x) * 57.29578;// 与第一个点相同layer的最后一个点的yaw
+//                break;
+//            }
+//        }
+//    }
+
+//    ROS_WARN("SCAN");
+//    std::vector<bool> half_passed(N_SCANS, false);
 
     if(feature_enabled)
     {
@@ -1068,12 +1073,12 @@ void Preprocess::rs_handler(const sensor_msgs::PointCloud2_<allocator<void>>::Co
             added_pt.intensity = pl_orig.points[i].intensity;
             added_pt.curvature = pl_orig.points[i].time / 1000.0;  // curvature unit: ms
 
-            if (!given_offset_time)
+//            if (!given_offset_time)
             {
                 int layer = pl_orig.points[i].ring;
                 double yaw_angle = atan2(added_pt.y, added_pt.x) * 57.2957;
 
-                if (is_first[layer])
+                if (is_first[layer]) //如果是当前扫描线第一个点
                 {
                     // printf("layer: %d; is first: %d", layer, is_first[layer]);
                     yaw_fp[layer]=yaw_angle;
@@ -1094,7 +1099,11 @@ void Preprocess::rs_handler(const sensor_msgs::PointCloud2_<allocator<void>>::Co
                     added_pt.curvature = (yaw_fp[layer]-yaw_angle+360.0) / omega_l;
                 }
 
-                if (added_pt.curvature < time_last[layer])  added_pt.curvature+=360.0/omega_l;
+                if (added_pt.curvature < time_last[layer])
+                {
+//                    added_pt.curvature+=360.0/omega_l;
+                    continue;
+                }
 
                 yaw_last[layer] = yaw_angle;
                 time_last[layer]=added_pt.curvature;
@@ -1106,6 +1115,8 @@ void Preprocess::rs_handler(const sensor_msgs::PointCloud2_<allocator<void>>::Co
                 if(added_pt.z < -2.5 || dist2sensor > 100 * 100 || dist2sensor <= blind * blind)
                     continue;
 
+//                if(given_offset_time)
+//                    added_pt.curvature = pl_orig.points[i].time / 1000.0;
                 pl_surf.points.push_back(added_pt);
 
 //                if(added_pt.x*added_pt.x+added_pt.y*added_pt.y+added_pt.z*added_pt.z > (blind * blind))
