@@ -5,7 +5,7 @@
 
 typedef MTK::vect<3, double> vect3;
 typedef MTK::SO3<double> SO3;
-typedef MTK::S2<double, 98090, 10000, 1> S2; 
+typedef MTK::S2<double, 98090, 10000, 1> S2; //S2 流形
 typedef MTK::vect<1, double> vect1;
 typedef MTK::vect<2, double> vect2;
 
@@ -17,7 +17,7 @@ MTK_BUILD_MANIFOLD(state_ikfom,
 ((vect3, vel))
 ((vect3, bg))
 ((vect3, ba))
-((S2, grav))
+((S2, grav)) //S2流形,grav为负值
 );
 
 MTK_BUILD_MANIFOLD(input_ikfom,

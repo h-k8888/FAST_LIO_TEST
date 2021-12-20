@@ -52,6 +52,7 @@ M3F Eye3f(M3F::Identity());
 V3D Zero3d(0, 0, 0);
 V3F Zero3f(0, 0, 0);
 
+// 储存一帧lidar数据及imu数据序列
 struct MeasureGroup     // Lidar data and imu dates for the curent process
 {
     MeasureGroup()
@@ -59,8 +60,8 @@ struct MeasureGroup     // Lidar data and imu dates for the curent process
         lidar_beg_time = 0.0;
         this->lidar.reset(new PointCloudXYZI());
     };
-    double lidar_beg_time;
-    double lidar_end_time;
+    double lidar_beg_time; // lidar data begin time in the MeasureGroup
+    double lidar_end_time; // lidar data end time in the MeasureGroup
     PointCloudXYZI::Ptr lidar;
     deque<sensor_msgs::Imu::ConstPtr> imu;
 };
