@@ -319,6 +319,8 @@ void ImuProcess::UndistortPcl(const MeasureGroup &meas, esekfom::esekf<state_ikf
   /*** calculated the pos and attitude prediction at the frame-end ***/
   double note = pcl_end_time > imu_end_time ? 1.0 : -1.0;
   dt = note * (pcl_end_time - imu_end_time);// lidar终点与imu终点时间差
+  if(note == -1.0)
+      ROS_INFO("pcl_end_time <= imu_end_time");
   kf_state.predict(dt, Q, in); // in 此时为最后一个imu数据，传播到lidar终点时刻与imu终点时刻较大者
   
   imu_state = kf_state.get_x();//lidar终点时刻与imu终点时刻较大者，imu位姿
@@ -389,9 +391,12 @@ void ImuProcess::UndistortPcl(const MeasureGroup &meas, esekfom::esekf<state_ikf
 //        SO3 so3_i = so3_head.slerp(dt / t_duration, so3_tail);
         Eigen::Quaterniond q_i = q_head.slerp(dt / t_duration, q_tail);
         V3D T_i(vel_imu * dt + 0.5 * acc_imu * dt * dt);//T(i <-- end)
+//        V3D T_i(vel_imu * dt);//T(i <-- end)
+
 
         // j - 1 <-- P_i
-        V3D P_head = (q_i * P_i + T_i);
+        V3D P_head = (q_i.conjugate() * q_head * P_i + T_i);
+
         // world <-- P_head
         V3D P_w = R_imu * P_head + pos_imu;
         // lidar_end <-- world
