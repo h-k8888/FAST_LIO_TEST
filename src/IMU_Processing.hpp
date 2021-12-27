@@ -352,10 +352,15 @@ void ImuProcess::UndistortPcl(const MeasureGroup &meas, esekfom::esekf<state_ikf
     rot_head<<MAT_FROM_ARRAY(head->rot);
     rot_tail<<MAT_FROM_ARRAY(tail->rot);
 
+    double t_duration = tail->offset_time - head->offset_time;
     Eigen::Quaterniond q_head(rot_head);
     Eigen::Quaterniond q_tail(rot_tail);
+    Eigen::Quaterniond r_delta = q_tail.conjugate() * q_head;
 
-    double t_duration = tail->offset_time - head->offset_time;
+    V3D pos_head, pos_tail, t_delta;
+    pos_head<<VEC_FROM_ARRAY(head->pos);
+    pos_tail<<VEC_FROM_ARRAY(tail->pos);
+    t_delta = pos_tail - pos_head;
 
     for(; it_pcl->curvature / double(1000) > head->offset_time; it_pcl --) //head->offset_time为j-1时刻，imu相对于传播起始时刻的时间
     {
@@ -389,13 +394,16 @@ void ImuProcess::UndistortPcl(const MeasureGroup &meas, esekfom::esekf<state_ikf
       (R_i * (imu_state.offset_R_L_I * P_i + imu_state.offset_T_L_I) + T_ei) - imu_state.offset_T_L_I);// not accurate!
 
 //        SO3 so3_i = so3_head.slerp(dt / t_duration, so3_tail);
-        Eigen::Quaterniond q_i = q_head.slerp(dt / t_duration, q_tail);
-        V3D T_i(vel_imu * dt + 0.5 * acc_imu * dt * dt);//T(i <-- end)
+        float s = dt / t_duration;
+//        ROS_INFO("S: %f",s);
+        Eigen::Quaterniond q_i = Eigen::Quaterniond::Identity().slerp(s, r_delta);
+        V3D T_i(s * t_delta);
 //        V3D T_i(vel_imu * dt);//T(i <-- end)
 
 
         // j - 1 <-- P_i
-        V3D P_head = (q_i.conjugate() * q_head * P_i + T_i);
+//        M3D R_i_lidar(Exp(imu_state.offset_R_L_I.conjugate() * angvel_avr, dt));//R(global <-- i)
+        V3D P_head = (q_i * P_i + T_i);
 
         // world <-- P_head
         V3D P_w = R_imu * P_head + pos_imu;
