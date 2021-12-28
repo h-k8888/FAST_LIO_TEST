@@ -944,9 +944,9 @@ void Preprocess::rs_handler(const sensor_msgs::PointCloud2_<allocator<void>>::Co
     pl_surf.reserve(plsize);
 //    ROS_INFO("PLSIZE: %d", plsize);
 
-//    //排除错误时间戳
-//    if (pl_orig.points[plsize - 1].time > 1000000)
-//        pl_orig.points[plsize - 1].time = -1;
+    if (pl_orig.points[plsize - 1].time > 1000000)
+//        for (int i = 0; i < plsize; i++)
+            pl_orig.points[plsize - 1].time = 0;
 
     /*** These variables only works when no point timestamps given ***/
     double omega_l = 0.361 * SCAN_RATE;       // scan angular velocity
@@ -954,31 +954,35 @@ void Preprocess::rs_handler(const sensor_msgs::PointCloud2_<allocator<void>>::Co
     std::vector<double> yaw_fp(N_SCANS, 0.0);      // yaw of first scan point
     std::vector<float> yaw_last(N_SCANS, 0.0);   // yaw of last scan point
     std::vector<float> time_last(N_SCANS, 0.0);  // last offset time
+
+//    std::vector<float> yaw_delta(N_SCANS, 0.0);   // yaw of last scan point
+
     /*****************************************************************/
 
-//    //当前帧最后一个点的时间大于0，认为已经给出时间补偿
-//    if (pl_orig.points[plsize - 1].time > 0)
-//    {
-//        given_offset_time = true;
-//    }
-//    else
-//    {
-//        //如果时间不正确，需要根据yaw重新计算时间
-//        given_offset_time = false;
-//        double yaw_first = atan2(pl_orig.points[0].y, pl_orig.points[0].x) * 57.29578; // 记录第一个点(index 0)的yaw， to degree
-//        double yaw_end  = yaw_first;
-//        int layer_first = pl_orig.points[0].ring; // 第一个点(index 0)的layer序号
-//        for (uint i = plsize - 1; i > 0; i--) // 倒序遍历，找到与第一个点相同layer的最后一个点
-//        {
-//            if (pl_orig.points[i].ring == layer_first)
-//            {
-//                yaw_end = atan2(pl_orig.points[i].y, pl_orig.points[i].x) * 57.29578;// 与第一个点相同layer的最后一个点的yaw
-//                break;
-//            }
-//        }
-//    }
+    //当前帧最后一个点的时间大于0，认为已经给出时间补偿
+    if (pl_orig.points[plsize - 1].time > 0)
+    {
+        given_offset_time = true;
+    }
+    else
+    {
+        //如果时间不正确，需要根据yaw重新计算时间
+        given_offset_time = false;
+        double yaw_first = atan2(pl_orig.points[0].y, pl_orig.points[0].x) * 57.29578; // 记录第一个点(index 0)的yaw， to degree
+        double yaw_end  = yaw_first;
+        int layer_first = pl_orig.points[0].ring; // 第一个点(index 0)的layer序号
+        for (uint i = plsize - 1; i > 0; i--) // 倒序遍历，找到与第一个点相同layer的最后一个点
+        {
+            if (pl_orig.points[i].ring == layer_first)
+            {
+                yaw_end = atan2(pl_orig.points[i].y, pl_orig.points[i].x) * 57.29578;// 与第一个点相同layer的最后一个点的yaw
+                break;
+            }
+        }
+    }
 
 //    ROS_WARN("SCAN");
+//    int count_0 = 0;
 //    std::vector<bool> half_passed(N_SCANS, false);
 
     if(feature_enabled)
@@ -1072,11 +1076,18 @@ void Preprocess::rs_handler(const sensor_msgs::PointCloud2_<allocator<void>>::Co
             added_pt.z = pl_orig.points[i].z;
             added_pt.intensity = pl_orig.points[i].intensity;
             added_pt.curvature = pl_orig.points[i].time / 1000.0;  // curvature unit: ms
-
+//            if (pl_orig.points[i].time == 0) {
+//                ROS_INFO("pl_orig.points[i].time == 0, ring:%d", pl_orig.points[i].ring);
+//                ++count_0;
+//            }
 //            if (!given_offset_time)
             {
                 int layer = pl_orig.points[i].ring;
                 double yaw_angle = atan2(added_pt.y, added_pt.x) * 57.2957;
+
+//                if(layer == 64)
+//                    ROS_WARN("LINE: %d, time: %f, time_last[layer] %f", layer, added_pt.curvature,time_last[layer]);
+
 
                 if (is_first[layer]) //如果是当前扫描线第一个点
                 {
@@ -1086,37 +1097,59 @@ void Preprocess::rs_handler(const sensor_msgs::PointCloud2_<allocator<void>>::Co
                     added_pt.curvature = 0.0;
                     yaw_last[layer]=yaw_angle;
                     time_last[layer]=added_pt.curvature;
+
+//                    yaw_delta[layer] = 0.0;
                     continue;
                 }
 
+                float yaw_relative = 0.0;
                 // compute offset time
                 if (yaw_angle <= yaw_fp[layer])
                 {
                     added_pt.curvature = (yaw_fp[layer]-yaw_angle) / omega_l;
+                    yaw_relative = (yaw_fp[layer]-yaw_angle);
                 }
                 else
                 {
                     added_pt.curvature = (yaw_fp[layer]-yaw_angle+360.0) / omega_l;
+                    yaw_relative = (yaw_fp[layer]-yaw_angle+360.0);
                 }
 
                 if (added_pt.curvature < time_last[layer])
                 {
-//                    added_pt.curvature+=360.0/omega_l;
-                    continue;
+                    ROS_WARN("LINE: %d, time: %f, time_last[layer] %f", layer, added_pt.curvature,time_last[layer]);
+
+                    added_pt.curvature+=360.0/omega_l;
+//                    continue;
                 }
+
+//                if(yaw_relative < yaw_delta[layer])
+//                    ROS_WARN("LINE: %d, yaw_delta:%f, time: %f, time_last[layer] %f", layer, yaw_relative, added_pt.curvature, time_last[layer]);
+//
+//                if(yaw_relative > yaw_delta[layer])
+//                    yaw_delta[layer] = yaw_relative;
 
                 yaw_last[layer] = yaw_angle;
                 time_last[layer]=added_pt.curvature;
+
+//                if(layer == 64)
+//                {
+//                    ROS_WARN("LINE: %d, yaw_delta:%f, yaw angle:%f, time: %f, time_last[layer] %f", layer, yaw_relative, yaw_angle, added_pt.curvature, time_last[layer]);
+//                }
             }
+
+
 
             if (i % point_filter_num == 0)
             {
                 float dist2sensor = added_pt.x*added_pt.x+added_pt.y*added_pt.y+added_pt.z*added_pt.z;
                 if(added_pt.z < -2.5 || dist2sensor > 100 * 100 || dist2sensor <= blind * blind)
+//                if(added_pt.curvature < 1.0 || added_pt.z < -2.5 || dist2sensor > 100 * 100 || dist2sensor <= blind * blind)
                     continue;
 
 //                if(given_offset_time)
 //                    added_pt.curvature = pl_orig.points[i].time / 1000.0;
+
                 pl_surf.points.push_back(added_pt);
 
 //                if(added_pt.x*added_pt.x+added_pt.y*added_pt.y+added_pt.z*added_pt.z > (blind * blind))
@@ -1126,4 +1159,6 @@ void Preprocess::rs_handler(const sensor_msgs::PointCloud2_<allocator<void>>::Co
             }
         }
     }
+//    ROS_INFO("count time == 0, %d", count_0);
+
 }

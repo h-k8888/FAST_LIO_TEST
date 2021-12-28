@@ -94,6 +94,8 @@ bool   point_selected_surf[100000] = {0}; // 是否为平面特征点
 bool   lidar_pushed, flg_first_scan = true, flg_exit = false, flg_EKF_inited;
 bool   scan_pub_en = false, dense_pub_en = false, scan_body_pub_en = false;
 
+float time_delay = 0.0;
+
 vector<vector<int>>  pointSearchInd_surf; 
 vector<BoxPointType> cub_needrm;  //ikd-tree中，地图需要移除的包围盒序列
 vector<PointVector>  Nearest_Points; 
@@ -204,7 +206,8 @@ void RGBpointBodyToWorld(PointType const * const pi, PointType * const po)
     po->x = p_global(0);
     po->y = p_global(1);
     po->z = p_global(2);
-    po->intensity = pi->intensity;
+//    po->intensity = pi->intensity;
+    po->intensity = pi->curvature;
 }
 
 void RGBpointBodyLidarToIMU(PointType const * const pi, PointType * const po)
@@ -359,7 +362,7 @@ void imu_cbk(const sensor_msgs::Imu::ConstPtr &msg_in)
         msg->header.stamp = \
         ros::Time().fromSec(timediff_lidar_wrt_imu + msg_in->header.stamp.toSec());
     }
-
+    msg->header.stamp = ros::Time().fromSec(msg->header.stamp.toSec() - time_delay);
     double timestamp = msg->header.stamp.toSec();
 
     mtx_buffer.lock();
@@ -818,7 +821,9 @@ int main(int argc, char** argv)
     nh.param<vector<double>>("mapping/extrinsic_T", extrinT, vector<double>());
     nh.param<vector<double>>("mapping/extrinsic_R", extrinR, vector<double>());
     cout<<"p_pre->lidar_type "<<p_pre->lidar_type<<endl;
-    
+
+    nh.param<float>("mapping/time_delay",time_delay,0.0);
+
     path.header.stamp    = ros::Time::now();
     path.header.frame_id ="camera_init";
 
